@@ -1,0 +1,312 @@
+﻿/*
+ * lecroyparser.jsl
+ * 
+ * leCroyParser.py를 기반으로 작성한 JMP script로 LeCroy scope의 binary file을 table로 변환한다.
+ * lecryoparser.py: https://github.com/bennomeier/lecroyparser
+ ** (leycroyparser.py 사이트의 내용)
+ ** leCroyParser.py is derived from the matlab program ReadLeCroyBinaryWaveform.m, 
+ ** available at <https://www.mathworks.com/matlabcentral/fileexchange/26375-readlecroybinarywaveform-m>, 
+ ** Original version (c)2001 Hochschule fr Technik+Architektur Luzern Fachstelle Elektronik 6048 Horw, 
+ ** Switzerland Slightly modified by Alan Blankman, LeCroy Corporation, 2006
+ **
+ ** Further elements for the code were taken from pylecroy, written by Steve Bian
+ ** 
+ ** A useful resource for modifications is the LeCroy Remote Control Manual available 
+ ** at <http://cdn.teledynelecroy.com/files/manuals/dda-rcm-e10.pdf>
+ * 
+ */
+Names Default To Here(1);
+
+Define Class("ScopeData",
+	fpath = ""; fname = ""; offset=""; contents="";
+	x=""; y=""; dt=""; horizInterval=0;
+	instrument name=""; instrument number = "";
+	template name = ""; waveSource=""; waveArrayCount = "";
+	verticalCoupling = ""; bandwidthLimit = "";
+	recordType =""; processingDone=""; timebase = ""; triggerTime= "";
+	waveSourceList = {"Channel 1", "Channel 2", "Channel 3", "Channel 4"};
+	verticalCouplingList = {"DC50", "GND", "DC1M", "GND", "AC1M"};
+	bandWidthLimitlist = {"off", "on"};
+	endianness = {"big", "little"};
+	recordTypeList = {"single_sweep", "interleaved", "histogram", "graph",
+					 "filter_coefficient", "complex", "extrema", "sequence_obsolete",
+					 "centered_RIS", "peak_detect"};
+	processingList = {"No Processing", "FIR Filter", "Interpolated",
+					  "sparsed","autoscaled", "no_resulst", "rolling", "cumulative"};
+	
+	_init_ = Method({fpath}, 
+		this:fpath = fpath;
+		this:parseData();
+	);
+	
+	_show_ = Method({},
+		return( concat(" Le Croy Scope Data\!n",
+				" Path: ", fpath, "\!n",
+				" Instrument: ", instrument name, "\!n",
+				" Instrument Number: ", Char(instrument number),"\!n",
+				" Template Name: ", template name, "\!n",
+				" Channel: ", waveSource, "\!n",
+				" Wave Array Count: ", Char(waveArrayCount), "\!n",
+				" Vertical Coupling: ", verticalCoupling, "\!n",
+				" Bandwidth Limit: ", bandwidthLimit, "\!n",
+				" Record Type: ", recordType, "\!n",
+				" Processing: ", processingDone, "\!n",
+				" TimeBase: ", timebase, "\!n",
+				" TriggerTime: ", triggerTime) );
+	);
+	
+	parseData = Method({}, 
+		this:fname = regex(this:fpath, "[\w ]*\.\w*");
+		print(fpath, fname);
+
+		this:contents = Load Text File(fpath, BLOB());
+		//Show (contents);
+		dd = blob to char(blob peek (contents,0,32));
+		//show(dd);
+		offset = Contains(dd, "WAVEDESC") - 1;
+		//show(offset);
+		dx = blob to char(blob peek(contents, offset, 8),"us-ascii");
+		//show(dx);
+
+		commType = blob to matrix(blob peek(contents, offset+32, 2), "int", 2, "little")[1];
+		//show(commType);
+		commOrder = blob to matrix(blob peek(contents, offset+34, 2), "int", 2, "little")[1] + 1;
+		//show (commOrder);
+
+		template name = parseString(16);
+		//show(template name[2]);
+		wave descriptor = parseInt32(36);
+		user text = parseInt32(40);
+		//show(template name, wave descriptor, user text);
+
+		res desc1 = parseInt32(44);
+		//show(res desc1);
+
+		trigTimeArray = parseInt32(48);
+		ris time array = parseInt32(52);
+		res array1 = parseInt32(56);
+		waveArray1 = parseInt32(60);
+		//show(trigTimeArray, waveArray1, ris time array, res array1);
+		waveArray2 = parseInt32(64);
+		res array2 = parseInt32(68);
+		res array3 = parseInt32(72);
+		//show(waveArray2, res array2, res array3);
+		instrumentName = parseString(76);
+		instrumentNumber = parseInt32(92);
+		trace label = parseString(96);
+		//show(instrument Name, instrument number, trace label);
+
+		waveArrayCount = parseInt32(116);
+		//show(wave array count);
+		pnts_per_screen = parseInt32(120);
+		first_valid_pnt = parseInt32(124);
+		last_valid_pnt = parseInt32(128);
+		first_point = parseInt32(132);
+		sparsing_factor = parseInt32(136);
+		segment_index = parseInt32(140);
+		subarray_count = parseInt32(144);
+		sweeps_per_acq = parseInt32(148);
+		points_per_pair = parseInt16(152);
+		pair_offset = parseInt16(154);
+		//show(pnts_per_screen, first_valid_pnt, last_valid_pnt, first_point);
+		//show(sparsing_factor, segment_index, subarray_count, sweeps_per_acq, points_per_pair, pair_offset);
+		verticalGain = parseFloat(156);
+		verticalOffset = parseFloat(160);
+		//show(vertical gain, vertical offset);
+		max_value = parseFloat(164);
+		min_value = parseFloat(168);
+		//show(max_value, min_value);
+
+		nominalBits = parseInt16(172);
+		//show(nominalBits);
+		horizInterval = parseFloat(176);
+		horizOffset = parseDouble(180);
+		//show(horizInterval, horizOffset);
+		pixel_offset = parseDouble(188);
+		//show(pixel_offset);
+		vertunit = parseString(196, 48);
+		horunit = parseString(244, 48);
+		//show(vertunit, horunit);
+
+		triggerTime = parseTimeStamp(296);
+		//show(triggerTime);
+
+		recordType = recordTypeList[parseInt16(316)+1];
+		//show(recordType);
+		processingDone = processingList[parseInt16(318)+1];
+		//show(processingDone);
+		ris_sweeps = parseInt16(322);
+		timeBase = parseTimeBase(324);
+		//show(timeBase);
+		verticalCoupling = verticalCouplingList[parseInt16(326) + 1];
+		//show(verticalCoupling);
+		probe_att = parseFloat(328);
+		//show(probe_att);
+		fixed_vert_gain = parseFixedVerticalGain(332);
+		//show(fixed_vert_gain);
+		bandwidthLimit = bandwidthLimitList[parseInt16(334)+1];
+		//show(bandwidthLimit);
+		vertical_vernier = parseFloat(336);
+		acq_vert_offset = parseFloat(340);
+		//show(vertical_vernier, acq_vert_offset);
+		waveSource = waveSourceList[parseInt16(344)+1];
+		//show(waveSource);
+		start = offset + waveDescriptor + userText + trigTimeArray;
+		//show(start, offset, waveDescriptor, userText, trigTimeArray, commType, waveArray1);
+
+/*		y = if(
+			commType == 0,
+			blob to matrix(blob peek(contents, start, waveArray1), "int", 1, endianness[commOrder]),
+			blob to matrix(blob peek(contents, start, waveArray1), "int", 2, endianness[commOrder])
+		);*/
+		y = blob to matrix(blob peek(contents, start, waveArray1), "int", commType+1, endianness[commOrder]);
+		y = verticalGain * y - verticalOffset;
+/*		print(y[1],y[2],y[3],y[4]);
+		show(waveArrayCount, horizInterval, horizOffset);
+		print( waveArrayCount*horizInterval);*/
+		x = (0::waveArrayCount-1)*horizInterval+horizOffset;
+		/*print(x[1],x[2],x[3],x[4]);*/
+	);
+	
+	get X = Method({}, return(x));
+	get Y = Method({}, return(y));
+	
+	build DataTable = Method({},
+		dt = New Table(fname);
+		dt << New Column("T");
+		col = Column("T");
+		col << Set Values(x);
+		dt << New Column(waveSource);
+		col = Column(waveSource);
+		col << Set values(y);		
+	);
+	
+	build Graph = Method({},
+		Graph Builder(
+			Size( 551, 453 ),
+			Show Control Panel( 0 ),
+			Variables( X( :T ), Y( Column(waveSource) ) ),
+			Elements( Line( X, Y, Legend( 4 ) ) ),
+			SendToReport(
+				Dispatch( {}, "T", ScaleBox, {Format( "Best", 12 )} ),
+				Dispatch( {}, waveSource, ScaleBox, {Format( "Best", 12 )} )
+			)
+		);		
+	);
+
+	show information = Method({},
+		win = New Window ( concat("Infomation: ", fname),
+			vlistbox = V List Box(
+				Text Box (" LeCroy Scope Data"),
+				Text Box (concat(" Path: ", fpath), << set width(length(fpath)*10) ),
+				Text Box (concat(" Instrument: ", instrument name)),
+				Text Box (concat(" Instrument Number: ", Char(instrument number) )),
+				Text Box (concat(" Template Name: ", template name)),
+				Text Box (concat(" Channel: ", waveSource )),
+				Text Box (concat(" Wave Array Count: ", Char(waveArrayCount) ) ),
+				Text Box (concat(" Vertical Coupling: ", verticalCoupling )), 
+				Text Box (concat(" Bandwidth Limit: ", bandwidthLimit)), 
+				Text Box (concat(" Record Type: ", recordType)),
+				Text Box (concat(" Processing: ", processingDone)),
+				Text Box (concat(" TimeBase: ", timebase)),
+				Text Box (concat(" TriggerTime: ", triggerTime)),
+				Text Box (concat(" Horizontal Interval: ", Char(horizInterval)))
+			)
+		);
+	);
+
+	parseByte = Method({pos},
+		blob to matrix(blob peek(contents, offset+pos, 1), "int", 1, endianness[commOrder])[1];
+	);
+
+	parseInt16 = Method({pos}, 
+		blob to matrix(blob peek(contents, offset+pos, 2), "int", 2, endianness[commOrder])[1];
+	);
+	parseWord = Method({pos},
+		blob to matrix(blob peek(contents, offset+pos, 2), "uint", 2, endianness[commOrder])[1];
+	);
+	parseInt32 = Method({pos}, 
+		blob to matrix(blob peek(contents, offset+pos, 4), "int", 4, endianness[commOrder])[1];
+	);
+
+	parseFloat = Method({pos},
+		blob to matrix(blob peek(contents, offset+pos, 4), "float", 4,endianness[commOrder])[1];
+	);
+
+	parseDouble = Method({pos},
+		blob to matrix(blob peek(contents, offset+pos, 8), "float", 8, endianness[commOrder])[1];
+	);
+
+	parseString = Method({pos, length=16},
+		_t = blob to char(blob peek(this:contents, offset+pos, length), "us-ascii");
+		regex(_t, "([\w\d ]*)", "\1")
+	);
+
+	parseTimeStamp = Method({pos},
+		second = parseDouble(pos);
+		minute = parseByte(pos+8);
+		hour   = parseByte(pos+9);
+		day    = parseByte(pos+10);
+		month  = parseByte(pos+11);
+		year   = parseWord(pos+12);
+		show(year,month,day,hour,minute,second);
+		time string   = concat( concat items({char(year),
+											if(month<10, char(0)||char(month),char(month)),
+											if(day<10, char(0)||char(day), char(day))},"-"),
+								" ",
+								concat items(
+								{	if(hour<10,  char(0)||char(hour),  char(hour)  ),
+									if(minute<10,char(0)||char(minute),char(minute)),
+									if(second<10,char(0)||char(second),char(second))
+								},":")
+					);
+	);
+
+	parseTimeBase = Method({pos},
+		timeBaseNumber = parseInt16(pos);
+		if (
+			timeBaseNumber < 49,
+			unit = {"p","n","u","m"," ","k"}[1+(timeBaseNumber/9)];
+			value = {1,2,5,10,20,50,100,200,500}[1+mod(timeBaseNumber,9)];
+			concat (char(value), " ",trim(unit,"both"), "s/div"),
+			if (timeBaseNumber == 100,
+				"EXTERNAL",
+				"")
+		)
+	);
+	parseFixedVerticalGain = Method({pos},
+		fixedVertGain = parseInt16(pos);
+		show(fixedVertGain);
+		If(
+			fixedVertGain < 29,
+			unit = {"u","m"," ", "k"}[1+fixedVertGain/9]; 
+			value = {1,2,5,10,20,50,100,200,500}[1+mod(fixedVertGain,9)];
+			concat (char(value), " ", trim(unit, "both"), "V/div"),
+			"Unknown"
+		)
+	);
+);
+
+/***
+//fpath = "/D:/Works/C3Trace00637.trc";
+fpath = Pick File (
+	"Select LeCroy File",
+	"$DOCUMENTS",
+	{"LeCroy binaray file|trc","All Files|*"},
+	1, 
+	0, 
+	"",
+	"multiple"
+);
+Show(fpath);
+IF ( length(fpath) == 0 , Stop());
+
+for each ( {value, index}, fpath, 
+	scd = new Object(ScopeData(value));
+	scd:build DataTable();
+	scd:build graph();
+	scd:show information();
+/*	show(scd);
+	show(scd:get Y());*/
+);
+***/

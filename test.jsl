@@ -1,0 +1,25 @@
+﻿Names Default To Here(1);
+
+include("./lecroyparser.jsl");
+
+//fpath = "/D:/Works/C3Trace00637.trc";
+fpath = Pick File (
+	"Select LeCroy File",
+	"$DOCUMENTS",
+	{"LeCroy binaray file|trc","All Files|*"},
+	1, 
+	0, 
+	"",
+	"multiple"
+);
+Show(fpath);
+IF ( length(fpath) == 0 , Stop());
+
+for each ( {value, index}, fpath, 
+	scd = new Object(ScopeData(value));
+	scd:build DataTable();
+	scd:build graph();
+	scd:show information();
+/*	show(scd);
+	show(scd:get Y());*/
+);
